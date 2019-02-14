@@ -1,0 +1,18 @@
+Package: hathidy
+Type: Package
+Title: Hathi Trust Extracted Features Data
+Version: 0.1.0
+Author: Ben Schmidt
+Maintainer: Ben Schmidt <bmschmidt@gmail.com>
+Description: Using the Hathi Trust Extended Features API, retrieve word count data and part of speech data for any of over 15 million books.
+License: MIT
+Encoding: UTF-8
+recommends: hathi
+LazyData: true
+imports: stringr, dplyr, jsonlite, readr, purrr
+Suggests: 
+    knitr,
+    rmarkdown,
+    hathi,
+    testthat
+VignetteBuilder: knitr
