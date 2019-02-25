@@ -22,7 +22,18 @@ The purpose of this package is to allow you to quickly work with tidy-formatted 
 These features are useful input into a wide variety of tasks in natural language processing, visualization, and other areas.
 
 
-# Gibbon
+# Reading historical texts
+
+First, some imports. `hathidy` is this package: ggplot2 is for visualization, and `dplyr` and `tidytext` together supply a number of useful functions for working with wordcount data. 
+
+```{r, fig.show='hold'}
+library(hathi)
+library(hathidy)
+library(ggplot2)
+library(dplyr)
+library(tidytext)
+library(stringr)
+```
 
 As an example, let's take Edward Gibbon's *Decline and Fall of the Roman Empire*. 
 
@@ -32,21 +43,32 @@ First, I'll define the corpus as a list of ids.
 gibbon = c("njp.32101076189404", "njp.32101076189412", "njp.32101076189420", "njp.32101076189438", "njp.32101076189446", "njp.32101076189453","njp.32101076189461", "njp.32101076189479", "njp.32101076189487", "njp.32101076189495", "njp.32101076189503")
 ```
 
-Next, some imports. `hathidy` is this package: ggplot2 is for visualization, and `dplyr` and `tidytext` together supply a number of useful functions for working with wordcount data. 
-
-```{r, fig.show='hold'}
-library(hathidy)
-library(ggplot2)
-library(dplyr)
-library(tidytext)
-```
-
-Now we can load the data in. Note the global directory at the front here. You can store features in the current working directory, (probably in a folder called "features"), or use a global one, which is useful if you might work with Hathi more than once. If you don't specify a location, feature counts will be downloaded to a temporary volume, which is probably *not* the best behavior. (Among other things, your code will take much, much longer to run on a second instance.)
+Now we can load the data in. Note the global directory at the front here. You can store features in the current working directory, (probably in a folder called "features"), or use a global one. If you think you might work with Hathi more than once, having a local location might make sense: but for reproducible research, you should store just the files used in this particular project. If you don't specify *any* location, feature counts will be downloaded to a temporary directory, which is less than ideal. (Among other things, your code will take much, much longer to run on a second instance.)
 
 ```{r}
 options(hathidy_dir = "~/ht-ef/")
-gibbon_books = hathi_counts(gibbon, cols = c("page", "token", "section"))
-gibbon_books
+gibbon_books = hathi_counts(gibbon, cols = c("page", "token"))
+```
+
+```{r}
+gibbon_books %>%
+  group_by(page, htid) %>% 
+  summarize(count=n()) %>%
+  ggplot() + 
+  geom_tile(aes(x=page, y = htid, fill = count)) +
+  scale_fill_viridis_c()
+  
+```
+
+A similar plot, but looking through all million words in the decline, can let us see how often Gibbon speaks of "Barbarians." The chart shows a major change in verbiage: Gibbon stops heavily using the phrase 'barbarian' after the first book (first two of 12 volumes.)
+
+```{r}
+gibbon_books %>% 
+  ungroup %>%
+  mutate(overall_position = 1:n()) %>%
+  filter(token %>% str_detect("barbar")) %>%
+  ggplot() + geom_point(aes(x=overall_position, y = token, color=htid), alpha = 0.33, position="jitter") + 
+  labs(title="Usage of 'barbarian' in Gibbon's 'Decline'", subtitle="Book 1 uses 'Barbarian' much more")
 ```
 
 
@@ -54,62 +76,46 @@ gibbon_books
 gibbon_books %>% 
   group_by(htid, token) %>% summarize(count=sum(count)) %>%
   bind_tf_idf(token, htid, count) %>% 
-  arrange(-tf_idf) %>% 
-  group_by(htid, token) %>%
-  summarize(totidf = sum(tf_idf), count=sum(count)) %>%
-  arrange(-totidf) %>%
+  filter(str_detect(token, "^[a-z]{4,}$")) %>% # Only lowercase words; remove to see proper names.
+  arrange(-tf_idf) %>%
   slice(1:3)
 ```
 
-
-This bit doesn't work because POS is no longer requested.
 ```{r}
+f = gibbon_books %>%
+  group_by(htid)
 
-
-library(ggplot2)
-library(dplyr)
-library(stringr)
-
-data = gibbon_books %>%
-  mutate(overall_page = 1:n()) %>%
+z = f %>%
+  group_by(htid) %>%
   add_chunks(count, 10000) %>%
-  group_by(token) %>%
-  filter(sum(count) > 250) %>% # Only common words
-  mutate(wordTotal = sum(count)) %>%
-  mutate(lower = tolower((token))) %>%
-  group_by(lower) %>%
-  mutate(formTotal = sum(count)) %>%
-  group_by(token, POS) %>%
-  mutate(posTotal = sum(count)) %>%
-  filter(str_length(token) > 2, str_detect(token, "^[A-Z][a-z]")) %>%
-  filter(wordTotal/formTotal > .95) %>%
-  group_by(token) %>%
-  filter(sum(posTotal[POS=="NNP"])/wordTotal > .85)
+  group_by(htid, chunk) %>%
+  grouped_tfidf(token, count)
 
-data %>%
-  group_by(chunk, token) %>%
-  mutate(count=sum(count)) %>%
-  ggplot() + # aes(x=overall_page, size = count, y=reorder(token, count, FUN = sum), color=POS) +#geom_point() + theme_bw() + scale_size_continuous(trans="sqrt")
-  geom_tile(aes(fill=count, color=NULL, size=NULL, x = chunk, y = reorder(token, count, FUN=sum))) + scale_fill_viridis_c(trans="log")
+z %>% 
+  filter(token %>% str_detect("^[A-Za-z]+$")) %>%
+  arrange(-tfidf)
+
 ```
 
-Can we get a better ordering? Yes.
+
+Should you want to explore plotting on a one-dimensional axis using UMAP, try the below code.
 
 ```{r}
-
+if (FALSE) {}
 umap_ordering = function(frame) {
     mat = frame %>% select(-token) %>% as.matrix
     mat = mat/rowSums(mat)
-    d = umap::umap(mat, method="umap-learn", n_neighbors = 8, n_components = 1)
+    d = umap::umap(mat, n_neighbors = 8, n_components = 1)
     d$layout[,1]
 }
 
-ordering = data %>% group_by(chunk, token) %>% summarize(count=sum(count)) %>%
-  tidyr::spread(chunk, count, fill=0) %>%
+ordering = data %>% 
+  mutate(doc = paste(htid, chunk)) %>%
+  group_by(doc, token) %>% 
+  summarize(count=sum(count)) %>%
+  tidyr::spread(doc, count, fill=0) %>%
   mutate(order = umap_ordering(.)) %>%
   select(token, order)
-
-
 
 data %>% 
   group_by(chunk, token) %>%
@@ -119,28 +125,6 @@ data %>%
 
   geom_tile(aes(fill=count, color=NULL, size=NULL, x = chunk, y = reorder(token, order, FUN=sum))) + scale_fill_viridis_c(trans="log")
 
-
-```
-
-```{r}
-add_chunks = function(frame, length=2000) {
-  # Breaks a book into n-word chunks.
-  frame %>%
-    group_by(page, add = TRUE) %>% 
-    summarize(count=sum(count)) %>% 
-    mutate(tally = cumsum(count), chunk = 1 + tally %/% length) %>% 
-    select(page, chunk) %>% 
-    inner_join(frame, by ="page")
 }
-
-library(tidytext)
-
-f %>% 
-  add_chunks(10000) %>%
-  group_by(token, chunk) %>%
-  summarize(count=n()) %>%
-  bind_tf_idf(token, chunk, count) %>%
-  arrange(-tf_idf)
-
-f %>% arrange(-tfidf)
 ```
+

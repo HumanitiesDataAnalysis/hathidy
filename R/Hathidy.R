@@ -1,3 +1,18 @@
+#' Hathidy: Work with wordcount data for 15 million books.
+#'
+#' @description In actual research, you shouldn't download files multile times, even if you work in multiple files. This package
+#' uses a standard location.
+#'
+#'
+#' @docType package
+#'
+#' @name hathidy
+#'
+#' @import dplyr
+#' @import stringr
+#' @import purrr
+NULL
+
 
 #' Add a set of 'chunks' to a tibble with page-level counts.
 #'
@@ -8,8 +23,6 @@
 #'
 #' @return The input frame with a new column 'chunk'.
 #' @export
-#'
-#' @examples
 add_chunks = function(frame, count, length=2000) {
   # Breaks a book into fixed length
   count = enquo(count)
@@ -79,8 +92,37 @@ load_json = function(htid, check_suffixes = c("json","json.bz2","json.gz")) {
 }
 
 .get_metadata = function(htid) {
+  # Expand this out to use a cache? This is expensive.
   load_json(htid)[[2]]
 }
+
+#' Add TF-IDF summary based on groupings.
+#'
+#' @description The TF-IDF function in tidytext requires an explicit 'doc'
+#' parameter; this applies it on the existing dataset groups.
+#'
+#' @param frame A grouped data from
+#' @param word The unquoted variable name storing terms for frequency
+#' @param count The unquoted variable storing the count
+#'
+#' @return A data_frame with a column tfidf added.
+#' @export
+grouped_tfidf = function(frame, word, count) {
+  token = enquo(word)
+  count = enquo(count)
+  groupings = groups(f)
+  n_docs = frame %>% distinct(!!!groupings) %>% nrow
+  frame %>%
+    distinct(!!!groupings, token) %>%
+    group_by(!!token) %>%
+    summarize(idf = log(n_docs/n())) %>%
+    inner_join(frame) %>%
+    group_by(!!!groupings) %>%
+    mutate(doc_total = sum(!!count)) %>%
+    group_by(!!token, add = TRUE) %>%
+    summarize(count = sum(!!count), tfidf = count/doc_total[1]*idf[1])
+}
+
 
 .export = function(frame, htid, quoted, metadata, only_body = TRUE) {
   output = frame %>%
@@ -99,7 +141,7 @@ load_json = function(htid, check_suffixes = c("json","json.bz2","json.gz")) {
 
 #' Return Hathi Trust Extended Feature counts.
 #'
-#' @param htid A Hathi Trust volume identifier.
+#' @param htid A Hathi Trust volume identifier, or a list of several.
 #' @param cols The level of aggregation to return. Possible values: "page" (sequence in book), "token" (word), "POS"
 #'  (tagged part of speech), and "section." Default is c("page", "token"). If section is not requested, values are returned
 #'  only for the books body.
@@ -110,18 +152,11 @@ load_json = function(htid, check_suffixes = c("json","json.bz2","json.gz")) {
 #' "issn", "lccn", "title", "imprint", "lastUpdateDate", "governmentDocument",
 #' "pubDate", "pubPlace", "language", "bibliographicFormat", "genre", "issuance",
 #' "typeOfResource", "classification", "names", "htBibUrl", "handleUrl")
-#' @param
 #'
 #' @return a tibble, with columns created by the call.
 #' @export
-#'
-#' @examples
-#'
-#' htid =
-#'
 hathi_counts = function(htid, cols = c("page", "token"), metadata = c()) {
   cache_csv = TRUE
-
   if (length(htid) > 1) {
     # Do a list of them with a progress bar.
     pb = progress_estimated(length(htid))
