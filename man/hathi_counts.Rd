@@ -4,7 +4,8 @@
 \alias{hathi_counts}
 \title{Return Hathi Trust Extended Feature counts.}
 \usage{
-hathi_counts(htid, cols = c("page", "token"), metadata = c())
+hathi_counts(htid, cols = c("page", "token"), metadata = c(),
+  cache = "csv")
 }
 \arguments{
 \item{htid}{A Hathi Trust volume identifier, or a list of several.}
@@ -20,6 +21,8 @@ only for the books body.}
 "issn", "lccn", "title", "imprint", "lastUpdateDate", "governmentDocument",
 "pubDate", "pubPlace", "language", "bibliographicFormat", "genre", "issuance",
 "typeOfResource", "classification", "names", "htBibUrl", "handleUrl")}
+
+\item{cache}{Def Store a copy of the data for fast access next time. Default format is "csv."}
 }
 \value{
 a tibble, with columns created by the call.

@@ -13,17 +13,15 @@ vignette: >
 library(tidyverse)
 library(hathidy)
 fitz = read_csv("~/Dropbox/lib/hathi/fitz.csv", col_names = "htid")
-munro = read_csv("~/Dropbox/hathi_metadata/Munro.csv", col_names = "htid") %>% pull(htid) 
 #options(hathidy_dir = "/drobo/feature-counts")
 ```
 
 ```{r}
-#options(hathidy_dir = "/drobo/feature-counts")
-data = hathi_counts(fitz$htid, metadata = c("title"))
-
+options(hathidy_dir = "~/hathi-ef/")
+data = profvis::profvis({hathi_counts(fitz$htid %>% head(4), cols = c("page", "token", "section"), metadata = c("title"))})
+headers = data %>% filter(section=='header')
 data %>% filter(str_detect(title, "Gatsby")) %>% ungroup %>% sample_n(13)
 ```
-
 
 ```{r}
 

@@ -56,25 +56,32 @@ gibbon_books %>%
   summarize(count=n()) %>%
   ggplot() + 
   geom_tile(aes(x=page, y = htid, fill = count)) +
-  scale_fill_viridis_c()
+  scale_fill_viridis_c() + 
+  labs(title = "Gibbon's Decline and Fall, words per page by volume.")
+
+
   
 ```
 
 A similar plot, but looking through all million words in the decline, can let us see how often Gibbon speaks of "Barbarians." The chart shows a major change in verbiage: Gibbon stops heavily using the phrase 'barbarian' after the first book (first two of 12 volumes.)
 
 ```{r}
+
 gibbon_books %>% 
   ungroup %>%
   mutate(overall_position = 1:n()) %>%
   filter(token %>% str_detect("barbar")) %>%
+  group_by(token) %>% filter(sum(count) > 2) %>%
   ggplot() + geom_point(aes(x=overall_position, y = token, color=htid), alpha = 0.33, position="jitter") + 
   labs(title="Usage of 'barbarian' in Gibbon's 'Decline'", subtitle="Book 1 uses 'Barbarian' much more")
+
 ```
 
 
 ```{r}
 gibbon_books %>% 
-  group_by(htid, token) %>% summarize(count=sum(count)) %>%
+  group_by(htid) %>% 
+  summarize(count=sum(count)) %>%
   bind_tf_idf(token, htid, count) %>% 
   filter(str_detect(token, "^[a-z]{4,}$")) %>% # Only lowercase words; remove to see proper names.
   arrange(-tf_idf) %>%
