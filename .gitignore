@@ -33,3 +33,5 @@ vignettes/*.pdf
 *.utf8.md
 *.knit.md*.Rproj
 .Rproj.user
+doc
+Meta
