@@ -1,19 +1,21 @@
 Package: hathidy
 Type: Package
-Title: Hathi Trust Extracted Features Parsing
-Version: 0.1.0
+Title: Hathi Trust Extracted Features Access
+Version: 1.0.0
 Author: Ben Schmidt
 Maintainer: Ben Schmidt <bmschmidt@gmail.com>
-Description: Using the Hathi Trust Extended Features API, retrieve word count data and part of speech data for any of over 15 million books and parse in the tidyverse.
+Description: Using the Hathi Trust Extended Features API, retrieve word count data and part of speech data for any of over 15 million books, and parse it in the tidyverse.
 License: MIT
 Encoding: UTF-8
-recommends: hathi
 LazyData: true
-imports: stringr, dplyr, jsonlite, readr, purrr
+Imports: stringr, dplyr, jsonlite, readr, purrr, rlang
 Suggests: 
     knitr,
-    rmarkdown,
     hathi,
-    testthat
+    rmarkdown,
+    testthat,
+    tidytext,
+    ggplot2,
+    tidyr
 VignetteBuilder: knitr
-RoxygenNote: 6.1.1
+RoxygenNote: 7.0.2

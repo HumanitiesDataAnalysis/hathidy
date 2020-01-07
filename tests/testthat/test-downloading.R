@@ -5,7 +5,7 @@ library(dplyr)
 
 # options(hathidy_dir = "/drobo/feature-counts/")
 
-if (FALSE) {
+if (TRUE) {
   test_that("Empty Test is filled", {
     htid <- "mdp.39015022276334"
     dir <- hathidy:::hathidy_dir()

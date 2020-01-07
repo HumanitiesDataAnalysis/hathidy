@@ -3,7 +3,6 @@
 \docType{package}
 \name{hathidy}
 \alias{hathidy}
-\alias{hathidy-package}
 \title{Hathidy: Work with wordcount data for 15 million books.}
 \description{
 In actual research, you shouldn't download files multile times, even if you work in multiple files. This package

@@ -13,11 +13,12 @@
 #' @import purrr
 NULL
 
-# Clean ids don't have colons or slashes
+# Clean ids don't have colons or slashes, because those mess up file paths.
 id_clean <- function(htid) htid %>% str_replace_all(":", "+") %>% str_replace_all("/", "=")
 
-# Encoded ids for urls also replace periods with commas.
+# Encoded ids for urls also replace periods with commas, because those mess up URLs.
 id_encode <- function(htid) htid %>% id_clean() %>% str_replace_all("\\.", ",")
+
 
 pairtree <- function(htid) {
   splitted <- str_split(htid, "\\.", n = 2)[[1]]
@@ -45,7 +46,7 @@ download_http <- function(htid) {
   local_name <- local_loc(htid)
   url <- str_glue("https://data.analytics.hathitrust.org/htrc-ef-access/get?action=download-ids&id={htid}&output=json")
   dir.create(dirname(local_name), showWarnings = FALSE, recursive = TRUE)
-  download.file(url = url, destfile = local_name)
+  utils::download.file(url = url, destfile = local_name)
 }
 
 hathidy_dir <- function() {
@@ -53,8 +54,8 @@ hathidy_dir <- function() {
     message(
       stringr::str_glue(
         "Saving downloaded books to {tempdir()};",
-        " to speed up subsequent runs and be polite to the HTRC servers",
-        ", set a permanent local cache like 'options('hathidy_dir' = {path.expand(c('~/hathi-ef'))})'",
+        " to speed up subsequent runs and be polite to the HTRC servers,",
+        " set a permanent local cache like 'options('hathidy_dir' = {path.expand(c('~/hathi-ef'))})'",
         "."
       )
     )
@@ -115,7 +116,7 @@ multi_download =  function(htid, cols, metadata, cache)  {
   #  warning("Errors on the following htid(s):", errors)
   #}
 
-  value = htid %>% map(possibly(download, otherwise = data_frame(), quiet = FALSE)) %>% bind_rows()
+  value = htid %>% map(possibly(download, otherwise = tibble(), quiet = FALSE)) %>% bind_rows()
 
   diff = setdiff((value$htid), htid)
   if (length(diff) > 0) warning("Unable to return Hathi IDs", diff)
@@ -135,16 +136,23 @@ multi_download =  function(htid, cols, metadata, cache)  {
 #' "issn", "lccn", "title", "imprint", "lastUpdateDate", "governmentDocument",
 #' "pubDate", "pubPlace", "language", "bibliographicFormat", "genre", "issuance",
 #' "typeOfResource", "classification", "names", "htBibUrl", "handleUrl")
-#' @param cache Def Store a copy of the data for fast access next time. Default format is "csv."
-#'
+#' @param cache Store a copy of the data for fast access next time. Default format is "csv".
+#' "Support planned for 'parquet'.
+#' @param path A direct filepath to a json dump. Use this if you are not using a pairtree to store files. If this is entered, 'htid' is ignored.
 #' @return a tibble, with columns created by the call.
 #' @export
-hathi_counts <- function(htid, cols = c("page", "token"), metadata = c(), cache = "csv") {
+hathi_counts <- function(htid, cols = c("page", "token"), metadata = c(), cache = "csv", path = FALSE) {
+
+  if (path) {
+    htid = NULL
+    cache = FALSE
+  }
 
   if (length(htid) > 1) {
     return(multi_download(htid, cols, metadata, cache))
   }
 
+  # TODO raise on bad meta field.
   metadata <- intersect(
     metadata,
     c(
@@ -159,13 +167,18 @@ hathi_counts <- function(htid, cols = c("page", "token"), metadata = c(), cache 
 
   quoted <- rlang::syms(intersect(cols, c("page", "token", "POS", "section")))
 
-  local_csv <- local_loc(htid, suffix = "csv.gz")
-
-  if (cache == "csv" && file.exists(local_csv)) {
-    return(readr::read_csv(local_csv, col_types = "ccici", progress = FALSE) %>% .export(htid, quoted, metadata, only_body = !"section" %in% cols))
+  if (path == FALSE) {
+    local_csv <- local_loc(htid, suffix = "csv.gz")
+    if (cache == "csv" && file.exists(local_csv)) {
+      return(readr::read_csv(local_csv, col_types = "ccici", progress = FALSE) %>% .export(htid, quoted, metadata, only_body = !"section" %in% cols))
+    }
   }
 
-  listified_version <- load_json(htid, check_suffixes = c("json", "json.bz2", "json.gz"))
+  if (path) {
+    listified_version <- jsonlite::read_json(path)
+  } else {
+    listified_version <- load_json(htid, check_suffixes = c("json", "json.bz2", "json.gz"))
+  }
 
   if (is.null(listified_version)) {
     # Download if none of the files exist.
@@ -189,7 +202,7 @@ parse_section <- function(page, section) {
     lens <- sapply(d, length)
     poses <- lapply(d, names) %>% unlist()
     return(
-      data_frame(token = rep(names(d), times = lens), POS = poses, count = unlist(d), section = section)
+      tibble(token = rep(names(d), times = lens), POS = poses, count = unlist(d), section = section)
     )
   }
   return(NULL)

@@ -1,6 +1,6 @@
 ---
-title: "Vignette Title"
-author: "Vignette Author"
+title: "Getting wordcount data from the Hathi Trust with hathidy"
+author: "Ben Schmidt"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
@@ -21,117 +21,99 @@ The Hathi Trust has made available 15 million volumes of text with word counts a
 The purpose of this package is to allow you to quickly work with tidy-formatted data for any of these books.
 These features are useful input into a wide variety of tasks in natural language processing, visualization, and other areas.
 
-
 # Reading historical texts
 
-First, some imports. `hathidy` is this package: ggplot2 is for visualization, and `dplyr` and `tidytext` together supply a number of useful functions for working with wordcount data. 
+First, some imports. `hathidy` is this package: ggplot2 is for visualization, and `dplyr` and `tidytext` together supply a number of useful functions for working with wordcount data. I would simply import `tidyverse` here, which would take care of almost everything here, but generally they don't want you to put it in package dependencies.
 
 ```{r, fig.show='hold'}
-library(hathi)
 library(hathidy)
 library(ggplot2)
 library(dplyr)
 library(tidytext)
 library(stringr)
+library(purrr)
+library(tidyr)
 ```
 
-As an example, let's take Edward Gibbon's *Decline and Fall of the Roman Empire*. 
+As an example, let's take Edward Gibbon's *Decline and Fall of the Roman Empire*.
 
-First, I'll define the corpus as a list of ids.
+First, I'll define the corpus as a list of ids. This is the hardest part of the process; one good place to start from is the [Hathifiles](https://www.hathitrust.org/hathifiles), which include basic bibliographic data for all ~17 million books in Hathi. (Be aware that only about 90-95% of all books in the Hathifiles have wordcount data available; the collection continues to grow.)
+
+Or you can get a list of IDs from a standard identifier, whether a Hathi ID, an OCLC, or an LCCN. I don't run the code below because I don't want
+to install the `hathi` package from Github, but the code I used to make the list is below.
 
 ```{r}
-gibbon = c("njp.32101076189404", "njp.32101076189412", "njp.32101076189420", "njp.32101076189438", "njp.32101076189446", "njp.32101076189453","njp.32101076189461", "njp.32101076189479", "njp.32101076189487", "njp.32101076189495", "njp.32101076189503")
+#hathi::hathi_bib(htid = "nyp.33433081597191")$items$htid %>% paste(collapse='", "') %>% cat('c("', ., '")', sep="")
 ```
 
-Now we can load the data in. Note the global directory at the front here. You can store features in the current working directory, (probably in a folder called "features"), or use a global one. If you think you might work with Hathi more than once, having a local location might make sense: but for reproducible research, you should store just the files used in this particular project. If you don't specify *any* location, feature counts will be downloaded to a temporary directory, which is less than ideal. (Among other things, your code will take much, much longer to run on a second instance.)
 
 ```{r}
-options(hathidy_dir = "~/ht-ef/")
-gibbon_books = hathi_counts(gibbon, cols = c("page", "token"))
+gibbon = c("nyp.33433081597316", "nyp.33433081597191", "nyp.33433081597209", "nyp.33433081597217", "nyp.33433081597225", "nyp.33433081597233", "nyp.33433081597241", "nyp.33433081597258", "nyp.33433081597266", "nyp.33433081597274", "nyp.33433081597282", "nyp.33433081597290", "nyp.33433081597308")
+
+# The first volume in this set is notes.
+gibbon_vols = tibble(htid=gibbon, vol_number = c(NA, 1:12))
+
 ```
+
+Once the HTIDs are known, we can load the data in. Note the global directory at the front here. It's off by default, again so this can live online: but I strongly recommend filling in this field whenever using the package. You can store features in the current working directory, (probably in a folder called "features"), or use a global one. If you think you might work with Hathi more than once, having a local location might make sense: but for reproducible research, you should store just the files used in this particular project. If you don't specify *any* location, feature counts will be downloaded to a temporary directory and deleted at the end of the session, which is less than ideal. (Among other things, your code will take much, much longer to run on a second or third run.)
+
+```{r}
+# options(hathidy_dir = "~/hathi-ef/")
+gibbon_books = hathi_counts(gibbon, cols = c("page", "token")) %>% inner_join(gibbon_vols)
+```
+
+You can get an overview of just the words per page in these volumes. This instantly makes clear that there's a difference between the last 6 volumes and the first six in how they treat notes.
 
 ```{r}
 gibbon_books %>%
-  group_by(page, htid) %>% 
-  summarize(count=n()) %>%
+  group_by(page, htid, vol_number) %>% 
+  summarize(count=sum(count)) %>%
   ggplot() + 
-  geom_tile(aes(x=page, y = htid, fill = count)) +
-  scale_fill_viridis_c() + 
+  geom_tile(aes(x=page, y = vol_number, fill = count)) +
+  scale_fill_viridis_c("Words on page") + 
   labs(title = "Gibbon's Decline and Fall, words per page by volume.")
-
-
   
 ```
 
-A similar plot, but looking through all million words in the decline, can let us see how often Gibbon speaks of "Barbarians." The chart shows a major change in verbiage: Gibbon stops heavily using the phrase 'barbarian' after the first book (first two of 12 volumes.)
+A similar plot, but looking through all million words in the *Decline*, can let us see how often Gibbon speaks of "Barbarians." Turns out, he starts capitalizing it in Book 2.
 
 ```{r}
 
 gibbon_books %>% 
   ungroup %>%
   mutate(overall_position = 1:n()) %>%
-  filter(token %>% str_detect("barbar")) %>%
+  filter(token %>% str_detect("[Bb]arbar")) %>%
   group_by(token) %>% filter(sum(count) > 2) %>%
-  ggplot() + geom_point(aes(x=overall_position, y = token, color=htid), alpha = 0.33, position="jitter") + 
-  labs(title="Usage of 'barbarian' in Gibbon's 'Decline'", subtitle="Book 1 uses 'Barbarian' much more")
+  ggplot() + geom_point(aes(x=overall_position, y = token, color=vol_number), alpha = 0.33, position="jitter") + 
+  labs(title="Usage of 'barbarian' in Gibbon's 'Decline'", subtitle="Book 1 uses 'barbarian' rather than 'Barbarian'")
 
 ```
 
+Using tidytext, we can add tf_idf scores to every column. Here's a chart of the highest TF-IDF words distinguishing each volume.
 
-```{r}
+```{r fig.height=8}
 gibbon_books %>% 
-  group_by(htid) %>% 
+  group_by(htid, token) %>% 
   summarize(count=sum(count)) %>%
   bind_tf_idf(token, htid, count) %>% 
   filter(str_detect(token, "^[a-z]{4,}$")) %>% # Only lowercase words; remove to see proper names.
-  arrange(-tf_idf) %>%
-  slice(1:3)
+  mutate(rank = rank(-tf_idf, ties.method = "random")) %>%
+  filter(rank <=5) %>% ggplot() + geom_text(aes(y=-rank, label = str_c(rank, ". ", token, " (", count, ")" )), x = 0, adj = 0) + facet_wrap(~htid, scales = "free_y") + theme_void() 
 ```
 
-```{r}
-f = gibbon_books %>%
-  group_by(htid)
+Finally, here's a chart comparing word usage in the 
 
-z = f %>%
-  group_by(htid) %>%
-  add_chunks(count, 10000) %>%
-  group_by(htid, chunk) %>%
-  grouped_tfidf(token, count)
+```{r, fig.width=12, fig.height=8}
+word_counts = gibbon_books %>% 
+  filter(!is.na(vol_number)) %>% # Drop the index
+  mutate(portion = ifelse(vol_number <= 6, "Western", "Eastern")) %>%
+  count(portion, token, wt=count)
 
-z %>% 
-  filter(token %>% str_detect("^[A-Za-z]+$")) %>%
-  arrange(-tfidf)
+wide_format = word_counts %>% group_by(token) %>% spread(portion, n, fill = 0.5)
 
-```
+ggplot(wide_format) + geom_text(aes(x=Eastern, y = Western, label=token), check_overlap=TRUE, size = 2.5) + 
+  scale_x_log10() + scale_y_log10() + theme_minimal() + 
+  geom_abline(intercept=0, slope = 1, lty=2, alpha=0.3, lwd=3)
 
-
-Should you want to explore plotting on a one-dimensional axis using UMAP, try the below code.
-
-```{r}
-if (FALSE) {}
-umap_ordering = function(frame) {
-    mat = frame %>% select(-token) %>% as.matrix
-    mat = mat/rowSums(mat)
-    d = umap::umap(mat, n_neighbors = 8, n_components = 1)
-    d$layout[,1]
-}
-
-ordering = data %>% 
-  mutate(doc = paste(htid, chunk)) %>%
-  group_by(doc, token) %>% 
-  summarize(count=sum(count)) %>%
-  tidyr::spread(doc, count, fill=0) %>%
-  mutate(order = umap_ordering(.)) %>%
-  select(token, order)
-
-data %>% 
-  group_by(chunk, token) %>%
-  summarize(count=sum(count)) %>%
-  inner_join(ordering) %>%
-  ggplot() + aes(x=chunk, size = (count), y=reorder(token, order)) + geom_point() + theme_bw() + scale_size_continuous(trans="sqrt")
-
-  geom_tile(aes(fill=count, color=NULL, size=NULL, x = chunk, y = reorder(token, order, FUN=sum))) + scale_fill_viridis_c(trans="log")
-
-}
 ```
 

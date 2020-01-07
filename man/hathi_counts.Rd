@@ -4,8 +4,13 @@
 \alias{hathi_counts}
 \title{Return Hathi Trust Extended Feature counts.}
 \usage{
-hathi_counts(htid, cols = c("page", "token"), metadata = c(),
-  cache = "csv")
+hathi_counts(
+  htid,
+  cols = c("page", "token"),
+  metadata = c(),
+  cache = "csv",
+  path = FALSE
+)
 }
 \arguments{
 \item{htid}{A Hathi Trust volume identifier, or a list of several.}
@@ -22,7 +27,10 @@ only for the books body.}
 "pubDate", "pubPlace", "language", "bibliographicFormat", "genre", "issuance",
 "typeOfResource", "classification", "names", "htBibUrl", "handleUrl")}
 
-\item{cache}{Def Store a copy of the data for fast access next time. Default format is "csv."}
+\item{cache}{Store a copy of the data for fast access next time. Default format is "csv".
+"Support planned for 'parquet'.}
+
+\item{path}{A direct filepath to a json dump. Use this if you are not using a pairtree to store files. If this is entered, 'htid' is ignored.}
 }
 \value{
 a tibble, with columns created by the call.
