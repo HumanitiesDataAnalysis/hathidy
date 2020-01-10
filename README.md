@@ -1,5 +1,8 @@
-The HathiTrust has over 15 million books, both in and out of copyright. This is an R package to load and manipulate page-level wordcount data that the HathiTrust Research Center has made available in R. It assumes you're using the `tidyverse` system of packages.
+The HathiTrust has over 15 million books, both in and out of copyright, for which page-level wordcount data is available. This is an R package to load and manipulate page-level wordcount data that the HathiTrust Research Center has made available in R.
 
+The name is a nod to the `tidyverse` family of packages on which it is built; the basic format of this package is to return data frames with token, page, and part-of-speech information that can then be used directly with `tidyverse` packages, and in packages like `stylo` the same way that `tidytext` parsing is.
+
+This provides a subset of the tools for working with extended-feature files in the Python package maintained by Peter Organisciak: [https://github.com/htrc/htrc-feature-reader]. The goal here is to provide a simple, id-based form of access and caching that works well for exploratory data analysis in classroom and workshop settings.
 
 # Installation
 
