@@ -1,4 +1,4 @@
-#' Hathidy: Work with wordcount data for 15 million books.
+#' Hathidy: Work with wordcount data for 17 million books.
 #'
 #' @description In actual research, you shouldn't download files multile times, even if you work in multiple files. This package
 #' uses a standard location.
@@ -19,6 +19,17 @@ id_clean <- function(htid) htid %>% str_replace_all(":", "+") %>% str_replace_al
 # Encoded ids for urls also replace periods with commas, because those mess up URLs.
 id_encode <- function(htid) htid %>% id_clean() %>% str_replace_all("\\.", ",")
 
+stubbytree <- function(htid) {
+  splitted <- str_split(htid, "\\.", n = 2)[[1]]
+  if (length(splitted) == 1) {
+    stop(str_glue("malformed htid {htid}: Hathi ids should contain a period"))
+  }
+  splitted[2]
+  cleaned = splitted[2] %>% id_clean()
+  breaks = seq(1, by=3, length.out = nchar(cleaned)/3)
+  stubbydir = str_sub(cleaned, breaks, breaks) %>% str_c(collapse="")
+  str_c(splitted[1], stubbydir, sep="/")
+}
 
 pairtree <- function(htid) {
   splitted <- str_split(htid, "\\.", n = 2)[[1]]
@@ -33,8 +44,8 @@ pairtree <- function(htid) {
 
 local_loc <- function(htid, suffix = "json") {
   clean <- htid %>% id_clean()
-  pairtr <- pairtree(htid)
-  str_glue("{hathidy_dir()}/{pairtr}/{clean}.{suffix}")
+  stub <- stubbytree(htid)
+  str_glue("{hathidy_dir()}/{stub}/{clean}.{suffix}")
 }
 
 ef_check <- function(htid) {
@@ -90,9 +101,8 @@ load_json <- function(htid, check_suffixes = c("json", "json.bz2", "json.gz")) {
   output <- frame %>%
     filter(ifelse(only_body, section == "body", TRUE)) %>%
     group_by(!!!quoted) %>%
-    summarize(count = sum(count)) %>%
-    mutate(htid = htid) %>%
-    ungroup
+    summarize(count = sum(count), .groups = "drop") %>%
+    mutate(htid = htid)
 
   metas <- .get_metadata(htid)
   if (nrow(output) > 0) {
@@ -138,7 +148,7 @@ multi_download =  function(htid, cols, metadata, cache)  {
 #' "typeOfResource", "classification", "names", "htBibUrl", "handleUrl")
 #' @param cache Store a copy of the data for fast access next time. Default format is "csv".
 #' "Support planned for 'parquet'.
-#' @param path A direct filepath to a json dump. Use this if you are not using a pairtree to store files. If this is entered, 'htid' is ignored.
+#' @param path A direct filepath to a json dump. Use this if you are not using a stubbytree to store files. If this is entered, 'htid' is ignored.
 #' @return a tibble, with columns created by the call.
 #' @export
 hathi_counts <- function(htid, cols = c("page", "token"), metadata = c(), cache = "csv", path = FALSE) {
@@ -185,6 +195,7 @@ hathi_counts <- function(htid, cols = c("page", "token"), metadata = c(), cache 
     download_http(htid)
     listified_version <- load_json(htid, check_suffixes = c("json"))
   }
+
 
   tibble <- listified_version %>% parse_listified_book()
 
