@@ -7,8 +7,9 @@
 hathi_counts(
   htid,
   cols = c("page", "token"),
-  metadata = c(),
-  cache = "csv",
+  sections = NULL,
+  metadata = c("id"),
+  cache = "feather",
   path = FALSE
 )
 }
@@ -17,7 +18,11 @@ hathi_counts(
 
 \item{cols}{The level of aggregation to return. Possible values: "page" (sequence in book), "token" (word), "POS"
 (tagged part of speech), and "section." Default is c("page", "token"). If section is not requested, values are returned
-only for the books body.}
+only for the book's body (not headers and footers.)}
+
+\item{sections}{Hathi divides books into 'header', 'footer', and 'body.' If you request 'section' as one of your
+cols, all will be returned; but if you do not, only the counts for the body will be returned unless you manually
+specificy, for example, (sections = c("header", "footer", "body"))}
 
 \item{metadata}{Supplements the returned frame with volume-level metadata.
  Possible values are:  c("schemaVersion", "dateCreated", "volumeIdentifier", "accessProfile",
@@ -30,7 +35,8 @@ only for the books body.}
 \item{cache}{Store a copy of the data for fast access next time. Default format is "csv".
 "Support planned for 'parquet'.}
 
-\item{path}{A direct filepath to a json dump. Use this if you are not using a pairtree to store files. If this is entered, 'htid' is ignored.}
+\item{path}{A direct filepath to a json dump. Use this if you are not using a stubbytree to store files.
+If this is entered, 'htid' is ignored.}
 }
 \value{
 a tibble, with columns created by the call.

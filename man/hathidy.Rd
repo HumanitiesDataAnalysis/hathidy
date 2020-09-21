@@ -3,8 +3,8 @@
 \docType{package}
 \name{hathidy}
 \alias{hathidy}
-\title{Hathidy: Work with wordcount data for 15 million books.}
+\title{Hathidy: Work with wordcount data for 17 million books from the Hathi Trust}
 \description{
-In actual research, you shouldn't download files multile times, even if you work in multiple files. This package
-uses a standard location.
+An R interface for transparently downloading and analyzing page-level wordcount
+data from the HathiTrust for over 17 million books.
 }

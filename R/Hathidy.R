@@ -1,8 +1,7 @@
-#' Hathidy: Work with wordcount data for 17 million books.
+#' Hathidy: Work with wordcount data for 17 million books from the Hathi Trust
 #'
-#' @description In actual research, you shouldn't download files multile times, even if you work in multiple files. This package
-#' uses a standard location.
-#'
+#' @description An R interface for transparently downloading and analyzing page-level wordcount
+#' data from the HathiTrust for over 17 million books.
 #'
 #' @docType package
 #'
@@ -31,33 +30,20 @@ stubbytree <- function(htid) {
   str_c(splitted[1], stubbydir, sep="/")
 }
 
-pairtree <- function(htid) {
-  splitted <- str_split(htid, "\\.", n = 2)[[1]]
-  if (length(splitted) == 1) {
-    stop(str_glue("malformed htid {htid}: Hathi ids should contain a period"))
-  }
-  breaks <- seq(1, nchar(splitted[2]), by = 2)
-  cleaned <- splitted[2] %>% id_encode()
-  slashes <- str_sub(cleaned, breaks, breaks + 1) %>% str_c(sep = "/", collapse = "/")
-  str_c(splitted[1], "pairtree_root", slashes, cleaned, sep = "/")
-}
-
 local_loc <- function(htid, suffix = "json") {
   clean <- htid %>% id_clean()
   stub <- stubbytree(htid)
   str_glue("{hathidy_dir()}/{stub}/{clean}.{suffix}")
 }
 
-ef_check <- function(htid) {
-  url <- str_glue("https://data.analytics.hathitrust.org/htrc-ef-access/get?action=check-exists&ids={htid}")
-  return(jsonlite::fromJSON(url))
-}
-
 download_http <- function(htid) {
-  local_name <- local_loc(htid)
-  url <- str_glue("https://data.analytics.hathitrust.org/htrc-ef-access/get?action=download-ids&id={htid}&output=json")
+  local_name <- local_loc(htid, suffix = "json.bz2")
+  tree = stubbytree(htid)
+  clean = id_clean(htid)
+  url <- str_glue("http://data.analytics.hathitrust.org/features-2020.03/{tree}/{clean}.json.bz2")
   dir.create(dirname(local_name), showWarnings = FALSE, recursive = TRUE)
   utils::download.file(url = url, destfile = local_name)
+  local_name
 }
 
 hathidy_dir <- function() {
@@ -75,8 +61,9 @@ hathidy_dir <- function() {
   return(getOption("hathidy_dir"))
 }
 
-load_json <- function(htid, check_suffixes = c("json", "json.bz2", "json.gz")) {
+load_json <- function(htid, check_suffixes = c("json", "json.bz2")) {
   for (suffix in check_suffixes) {
+
     fname <- local_loc(htid, suffix = suffix)
     if (file.exists(fname)) {
       tryCatch(
@@ -92,19 +79,15 @@ load_json <- function(htid, check_suffixes = c("json", "json.bz2", "json.gz")) {
   NULL
 }
 
-.get_metadata <- function(htid) {
-  # Expand this out to use a cache? This is expensive.
-  load_json(htid)[[2]]
-}
-
-.export <- function(frame, htid, quoted, metadata, only_body = TRUE) {
+.export <- function(frame, cols, metadata, sections, metadata_object) {
+  if (length(sections) < 3) {
+    frame <- frame %>% filter(section %in% sections)
+  }
   output <- frame %>%
-    filter(ifelse(only_body, section == "body", TRUE)) %>%
-    group_by(!!!quoted) %>%
-    summarize(count = sum(count), .groups = "drop") %>%
-    mutate(htid = htid)
+    group_by(!!!rlang::syms(cols)) %>%
+    summarize(count = sum(count), .groups = "drop")
 
-  metas <- .get_metadata(htid)
+  metas <- metadata_object[metadata]
   if (nrow(output) > 0) {
     for (meta in metadata) {
       output[[meta]] <- metas[[meta]]
@@ -133,12 +116,27 @@ multi_download =  function(htid, cols, metadata, cache)  {
   value
 }
 
+load_feather = function(path, cols, metadata, sections) {
+  expanded = tempfile()
+  R.utils::decompressFile(path, destname = expanded, remove = FALSE, FUN = gzfile, ext = ".feather", overwrite = TRUE)
+  table = arrow::read_feather(expanded, as_data_frame = FALSE, col_select = all_of(c(cols, "section", "count")))
+  metadata_fields = jsonlite::parse_json(table$metadata$meta)
+  value = .export(table, cols, metadata, sections = sections, metadata_object = metadata_fields)
+  unlink(expanded)
+  return(value)
+}
+
+
 #' Return Hathi Trust Extended Feature counts.
 #'
 #' @param htid A Hathi Trust volume identifier, or a list of several.
 #' @param cols The level of aggregation to return. Possible values: "page" (sequence in book), "token" (word), "POS"
 #'  (tagged part of speech), and "section." Default is c("page", "token"). If section is not requested, values are returned
-#'  only for the books body.
+#'  only for the book's body (not headers and footers.)
+#'
+#' @param sections Hathi divides books into 'header', 'footer', and 'body.' If you request 'section' as one of your
+#' cols, all will be returned; but if you do not, only the counts for the body will be returned unless you manually
+#' specificy, for example, (sections = c("header", "footer", "body"))
 #' @param metadata Supplements the returned frame with volume-level metadata.
 #'  Possible values are:  c("schemaVersion", "dateCreated", "volumeIdentifier", "accessProfile",
 #' "rightsAttributes", "hathitrustRecordNumber", "enumerationChronology",
@@ -148,14 +146,24 @@ multi_download =  function(htid, cols, metadata, cache)  {
 #' "typeOfResource", "classification", "names", "htBibUrl", "handleUrl")
 #' @param cache Store a copy of the data for fast access next time. Default format is "csv".
 #' "Support planned for 'parquet'.
-#' @param path A direct filepath to a json dump. Use this if you are not using a stubbytree to store files. If this is entered, 'htid' is ignored.
+#' @param path A direct filepath to a json dump. Use this if you are not using a stubbytree to store files.
+#'             If this is entered, 'htid' is ignored.
 #' @return a tibble, with columns created by the call.
 #' @export
-hathi_counts <- function(htid, cols = c("page", "token"), metadata = c(), cache = "csv", path = FALSE) {
+
+hathi_counts <- function(htid, cols = c("page", "token"), sections = NULL, metadata = c("id"), cache = "feather", path = FALSE) {
 
   if (path) {
     htid = NULL
     cache = FALSE
+  }
+
+  if (is.null(sections)) {
+    if ("section" %in% cols) {
+      sections = c("header", "footer", "body")
+    } else {
+      sections = c("body")
+    }
   }
 
   if (length(htid) > 1) {
@@ -175,12 +183,11 @@ hathi_counts <- function(htid, cols = c("page", "token"), metadata = c(), cache 
     )
   )
 
-  quoted <- rlang::syms(intersect(cols, c("page", "token", "POS", "section")))
 
   if (path == FALSE) {
-    local_csv <- local_loc(htid, suffix = "csv.gz")
-    if (cache == "csv" && file.exists(local_csv)) {
-      return(readr::read_csv(local_csv, col_types = "ccici", progress = FALSE) %>% .export(htid, quoted, metadata, only_body = !"section" %in% cols))
+    local_feather <- local_loc(htid, suffix = "feather.gz")
+    if (cache == "feather" && file.exists(local_feather)) {
+      return(load_feather(local_feather, cols, metadata, sections))
     }
   }
 
@@ -192,18 +199,38 @@ hathi_counts <- function(htid, cols = c("page", "token"), metadata = c(), cache 
 
   if (is.null(listified_version)) {
     # Download if none of the files exist.
-    download_http(htid)
-    listified_version <- load_json(htid, check_suffixes = c("json"))
+    file_name = download_http(htid)
+    listified_version <- load_json(htid, check_suffixes = c("json", "json.bz2"))
   }
-
 
   tibble <- listified_version %>% parse_listified_book()
 
-  if (cache == "csv") {
-    tibble %>% mutate(page = as.integer(page), count = as.integer(count)) %>% readr::write_csv(local_csv)
+  if (cache == "feather") {
+    intermediate = local_loc(htid, suffix = "feather")
+    final = local_loc(htid, suffix = "feather.gz")
+    meta_as_json = listified_version[["metadata"]] %>% jsonlite::toJSON(auto_unbox = TRUE, na = "null")
+    data = tibble
+    schema = arrow::schema(
+                           page=arrow::uint16(),
+                           section = arrow::dictionary(arrow::int8()),
+                           token = arrow::utf8(),
+                           POS = arrow::dictionary(arrow::int8()),
+                           count = arrow::uint16())
+    schema = schema$WithMetadata(list(meta = meta_as_json))
+    table = with(data, {
+      arrow::Table$create(page = as.integer(page),
+                          section = as.factor(section),
+                          token = token,
+                          POS = factor(POS),
+                          count = as.integer(count),
+                          schema = schema)
+    })
+    table$metadata$meta = meta_as_json
+    table %>% arrow::write_feather(intermediate, compression = "uncompressed")
+    R.utils::compressFile(intermediate, final, ext = ".gz", FUN = gzfile, overwrite = TRUE)
   }
 
-  return(tibble %>% .export(htid, quoted, metadata, only_body = !"section" %in% cols))
+  return(tibble %>%.export(cols, metadata, sections, listified_version[['metadata']]))
 
 }
 
