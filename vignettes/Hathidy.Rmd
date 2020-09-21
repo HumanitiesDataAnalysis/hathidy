@@ -59,7 +59,7 @@ Once the HTIDs are known, we can load the data in. Note the global directory at 
 
 ```{r}
 # options(hathidy_dir = "~/hathi-ef/")
-gibbon_books = hathi_counts(gibbon, cols = c("page", "token")) %>% inner_join(gibbon_vols)
+gibbon_books = hathi_counts(gibbon[1:3], cols = c("page", "token")) %>% inner_join(gibbon_vols)
 ```
 
 You can get an overview of just the words per page in these volumes. This instantly makes clear that there's a difference between the last 6 volumes and the first six in how they treat notes.

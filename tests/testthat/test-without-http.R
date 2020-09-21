@@ -8,3 +8,10 @@ test_that("Empty Test is filled", {
   }, "period")
 })
 
+test_that("stubbytree", {
+  expect_equal(
+    hathidy:::stubbytree("aeu.ark:/13960/t00008f0x"),
+    "aeu/a+30000"
+  )
+})
+

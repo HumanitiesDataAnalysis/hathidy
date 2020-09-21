@@ -1,0 +1,189 @@
+---
+title: "Moving from Hathi Trust records to "
+author: "Ben Schmidt"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+The Hathi Trust has made available 15 million volumes of text with word counts at the page level. ^[Boris Capitanu, Ted Underwood, Peter Organisciak, Timothy Cole, Maria Janina Sarol, J. Stephen Downie (2016). The HathiTrust Research Center Extracted Feature Dataset (1.0) [Dataset]. HathiTrust Research Center,http://dx.doi.org/10.13012/J8X63JT3.]
+
+The purpose of this package is to allow you to quickly work with tidy-formatted data for any of these books.
+These features are useful input into a wide variety of tasks in natural language processing, visualization, and other areas.
+
+# Reading historical texts
+
+First, some imports. `hathidy` is this package: ggplot2 is for visualization, and `dplyr` and `tidytext` together supply a number of useful functions for working with wordcount data. I would simply import `tidyverse` here, which would take care of almost everything here, but generally they don't want you to put it in package dependencies.
+
+```{r, fig.show='hold'}
+library(hathidy)
+library(tidyverse)
+```
+
+As an example, let's take a volume of nursing data.
+
+Using R OpenSci's `hathi` package to handle metadata.
+
+Start with a seed volume, and move on to metadata.
+
+```{r}
+
+bibliography_entry = hathi::hathi_bib(htid = "uma.ark:/13960/t0dv2df4m")$items
+
+# Keep only the Umass entries.
+
+htids = bibliography_entry$htid %>%
+  keep(~.x %>% str_detect("uma.ark"))
+
+metadata = bibliography_entry %>% 
+  filter(htid %>% str_detect("uma.ark")) %>%
+  mutate(enumcron = enumcron %>% str_replace_all("[^0-9 ]", "")) %>%
+  separate(enumcron, c("vol", "no", "year"), convert = TRUE) %>% 
+  select(htid, vol, no, year) %>%
+  mutate(month = ifelse(vol == 10, no+4, no)) %>%
+  mutate(date = as.Date(ISOdate(year, month, 1)))
+
+metadata
+  
+```
+```{r}
+
+a = hathi_counts(htids[1])
+
+page_counts = a %>% group_by(page) %>% summarize(count = sum(count)) %>% pull(count)
+
+
+
+```
+
+```{r}
+
+options(hathidy_dir = "/drobo/feature-counts/")
+
+data = hathi_counts(htids)
+
+# The first volume in this set is notes.
+
+head(data)
+```
+
+```{r}
+library(HumanitiesDataAnalysis)
+
+```
+
+Once the HTIDs are known, we can load the data in. Note the global directory at the front here. It's off by default, again so this can live online: but I strongly recommend filling in this field whenever using the package. You can store features in the current working directory, (probably in a folder called "features"), or use a global one. If you think you might work with Hathi more than once, having a local location might make sense: but for reproducible research, you should store just the files used in this particular project. If you don't specify *any* location, feature counts will be downloaded to a temporary directory and deleted at the end of the session, which is less than ideal. (Among other things, your code will take much, much longer to run on a second or third run.)
+
+```{r}
+nursing = data %>% inner_join(metadata)
+```
+
+You can get an overview of just the words per page in these volumes. This instantly makes clear that there's a difference between the last 6 volumes and the first six in how they treat notes.
+
+```{r}
+nursing %>%
+  group_by(page, htid, date) %>% 
+  summarize(count=sum(count)) %>%
+  ggplot() + 
+  geom_tile(aes(x=page, y = date, fill = count)) +
+  scale_fill_viridis_c("Words on page") + 
+  labs(title = "Words per page by volume.")
+  
+```
+
+When are they talking about the 'flu' here?  We'll look 
+
+```{r}
+
+nursing %>% 
+  ungroup %>%
+  filter(token %>% str_detect("[Ff]lu")) %>%
+  group_by(token) %>%
+  # Only words that appear more than twice
+  filter(sum(count) > 2) %>%
+  ggplot() +
+  geom_point(aes(x=date, y = token, color=year %>% as.character), alpha = 0.33, position="jitter") +
+  scale_color_brewer(type='qual') + 
+  labs(title="All words that use the regex '[Ff]lu'", subtitle = "'Flu' is not used in this journal, and 'influenza' is concentrated in 1918-1919")
+
+```
+
+Using tidytext, we can add tf_idf scores to every column. Here's a chart of the highest TF-IDF words distinguishing each volume.
+
+```{r}
+
+nursing %>% 
+  group_by(date) %>%
+  mutate(total_words = sum(count)) %>%
+  filter(token %>% tolower == "influenza") %>%
+  summarize(count =  sum(count), rate = sum(count)/total_words[1]) %>%
+  ggplot() +  geom_line(aes(x=date, y = rate)) + 
+  labs(title = "Usage of 'Influenza' by issue")
+
+```
+```{r}
+
+nursing %>% 
+  filter(token %>% tolower == "influenza") %>%
+  ggplot() + geom_point(aes(y = date, x = page, size = count, alpha = 0.5)) + theme_bw() +
+  labs(
+    title = "The 'influenza' peaks after the epidemic are clustered at individual pages."  
+  )
+
+```
+
+## Integration with other libraries
+
+```{r fig.height=8}
+
+library(tidytext)
+
+field = quo(date)
+
+nursing %>% 
+  mutate(date = date %>% lubridate::round_date("year")) %>%
+  group_by(!!field, token) %>% 
+  summarize(count=sum(count)) %>%
+  bind_tf_idf(token, !!field, count) %>% 
+  filter(str_detect(token, "^[a-z]{4,}$")) %>% 
+  mutate(rank = rank(-tf_idf, ties.method = "random")) %>%
+  filter(rank <=5) %>%
+  ggplot() + 
+  geom_text(aes(y=-rank, label = str_c(rank, ". ", token, " (", count, ")" )), x = 0, adj = 0) + 
+  facet_wrap(vars(!!field), scales = "free_y") + theme_void() 
+
+```
+
+```{r, fig.height = 6}
+
+library(quanteda)
+
+flu_pages = nursing %>% filter(token %>% tolower == "women") %>% distinct(date, page)
+
+quanteda_dfm = nursing %>%
+  inner_join(flu_pages) %>%
+  mutate(date = lubridate::floor_date(date, lubridate::years(10))) %>%
+  group_by(token, date) %>%
+  anti_join(tidytext::stop_words, by = c("token" = "word")) %>%
+  summarize(count = sum(count)) %>%
+  cast_dfm(date, token, count)
+
+# Calculate keyness and determine 1910 as the target group
+result_keyness <- textstat_keyness(quanteda_dfm, target = "1920-01-01", measure = "lr" )
+
+# Plot estimated word keyness
+textplot_keyness(result_keyness) + labs(title = "Log-likelihood ratio comparing pre-1920 to post-1920 uses of the word 'influenza'",
+                                        subtitle =  "The later years are post-clinical studies of the epidemic ")
+
+object.size(nursing) / 1000000
+```
