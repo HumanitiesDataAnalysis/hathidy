@@ -1,6 +1,6 @@
 The HathiTrust has over 17 million books, both in and out of copyright, for which page-level wordcount data is available. This is an R package to load and manipulate page-level wordcount data that the HathiTrust Research Center has made available in R.
 
-**Note**: This package only works with [version 2.0 of the HTRC extended features](https://wiki.htrc.illinois.edu/pages/viewpage.action?pageId=79069329). If you wish to work with the version 1.0 features or their "pairtree" format, you must install from 1.0 release.
+**Note**: This package only works with [version 2.0 of the HTRC extended features released in 2020](https://wiki.htrc.illinois.edu/pages/viewpage.action?pageId=79069329). If you wish to work with the version 1.0 features or their "pairtree" format, you should install from the [1.1 release.](https://github.com/HumanitiesDataAnalysis/hathidy/releases/tag/v1.1)
 
 The name is a nod to the `tidyverse` family of packages on which it is built; the basic format of this package is to return data frames with token, page, and part-of-speech information that can then be used directly with `tidyverse` packages, and in packages like `stylo` the same way that `tidytext` parsing is.
 
