@@ -36,9 +36,10 @@ One of the goals here is to support reproducible research workflows. One importa
 
 The most important are:
 
-1. The location of a directory where feature count files are stored. Downloading to this directory happens automatically.
+1. The location of a directory where feature count files are stored.
+   Downloading to this directory happens automatically.
    By default, this downloading happens to a temporary directory; but this is impolite and unnecessary.
 2. The *structure* of that directory. Hathi Extended Features and this package use,
-   by default, a system called 'stubbytree' in which files are very deeply nested inside folders
+   by default, a system called 'stubbytree' in which files are very nested inside folders
    to avoid overfilling if you have millions of files. 
 

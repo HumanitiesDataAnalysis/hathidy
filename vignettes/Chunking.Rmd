@@ -1,0 +1,115 @@
+---
+title: "A protocol for sensibly dividing books"
+output: html_notebook
+---
+
+
+
+```{r}
+library(hathidy)
+library(tidyverse)
+
+options("hathidy_dir" = "/drobo/hathi-ef/")
+counts = hathi_counts("uma.ark:/13960/t0dv2df4m")
+hathidy:::local_loc("uma.ark:/13960/t0dv2df4m")
+
+counts
+
+page_counts = counts %>% count(page, wt=count)
+
+```
+
+```{r}
+
+chunk = function(page_counts, target = 10000) {
+  
+  page_counts = page_counts %>% mutate(cum = 0, target = target)
+  original_vector = page_counts %>% pull(n)
+  page_counts$breaks = 0
+  page_counts$breaks[1] = 1
+  #sum(page_counts)
+  
+  first = 1
+  last = length(page_counts$breaks)
+  in_first_loop = TRUE
+  
+  while(TRUE) {
+    if (first == last) {
+      break
+    }
+    
+    vector = original_vector[first:last]
+
+    forward = cumsum(vector)
+    backward = cumsum(rev(vector))
+    
+    words_left = forward[length(forward)]
+    if (words_left < target * 1.5) {break}
+    overflow = words_left %% target
+    
+    if ((target - overflow) < overflow) {
+      overflow = -(target - overflow)
+    }
+    
+    if (!in_first_loop) {
+      chunks_remaining = round(words_left/target)
+      if (chunks_remaining > 2) {
+         overflow = overflow / chunks_remaining * 2
+      }
+    } else {
+      in_first_loop = FALSE
+    }
+    
+    loc_target = target + overflow/2
+    page_counts$target[first:last] = loc_target
+    if (words_left < (target * 2.5)) {
+      midpoint = which.min(abs(forward - words_left/2))
+      page_counts$breaks[midpoint + first + 1] = 1
+      break
+    }
+    
+    best_front = which.min(abs(forward - loc_target))
+    page_counts$cum[first:(first + best_front + 1)] = forward[1:(1 + best_front + 1)]
+    first = first + best_front
+    
+    if (first < last) {
+      page_counts$breaks[first] = 1
+    } else {
+      break
+    }
+    best_back = which.min(abs(backward - loc_target))
+    page_counts$cum[last:(last - best_back - 1)] = backward[1:best_back]
+
+    last = last - best_back
+    if (last > first) {
+      page_counts$breaks[last + 1] = 1
+    } else {
+      break
+    }
+  }
+  page_counts$chunk = cumsum(page_counts$breaks)
+  return(page_counts)
+}
+
+
+chunk(page_counts, 5000) %>% count(chunk, wt = n)
+
+chunk(page_counts) %>% summarize(count = sum(n))
+sum(page_counts$n)
+
+chunk(page_counts, 5000) %>%
+  group_by(chunk) %>%
+  filter(cum == max(cum)) %>%
+  ggplot() + geom_line() +
+  geom_point() + 
+  aes(x=page, y = cum, color=chunk, group = chunk) + 
+  geom_point(aes(y = target), color='red')
+
+```
+
+```{python}
+
+import htrc_features
+
+
+```
