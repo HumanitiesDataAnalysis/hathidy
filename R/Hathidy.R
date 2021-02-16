@@ -200,6 +200,7 @@ hathi_counts <- function(htid, cols = c("page", "token"), sections = NULL, metad
   listified_version[["metadata"]][["htid"]] = htid
 
   if (cache == "feather") {
+    if (!require(arrow)) {stop("You must install the Arrow package for caching.")}
     intermediate = local_loc(htid, suffix = "feather")
     final = local_loc(htid, suffix = "feather")
     meta_as_json = listified_version[["metadata"]] %>% jsonlite::toJSON(auto_unbox = TRUE, na = "null")
