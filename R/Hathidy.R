@@ -112,12 +112,9 @@ multi_download =  function(htid, cols, sections, metadata, cache)  {
 }
 
 load_feather = function(path, cols, metadata, sections) {
-  expanded = tempfile()
-  R.utils::decompressFile(path, destname = expanded, remove = FALSE, FUN = gzfile, ext = ".feather", overwrite = TRUE)
-  table = arrow::read_feather(expanded, as_data_frame = FALSE, col_select = all_of(c(cols, "section", "count")))
+  table = arrow::read_feather(path, as_data_frame = FALSE, col_select = all_of(c(cols, "section", "count")))
   metadata_fields = jsonlite::parse_json(table$metadata$meta)
   value = .export(table, cols, metadata, sections = sections, metadata_object = metadata_fields)
-  unlink(expanded)
   return(value)
 }
 
@@ -180,7 +177,7 @@ hathi_counts <- function(htid, cols = c("page", "token"), sections = NULL, metad
 
 
   if (path == FALSE) {
-    local_feather <- local_loc(htid, suffix = "feather.gz")
+    local_feather <- local_loc(htid, suffix = "feather")
     if (cache == "feather" && file.exists(local_feather)) {
       return(load_feather(local_feather, cols, metadata, sections))
     }
@@ -204,27 +201,26 @@ hathi_counts <- function(htid, cols = c("page", "token"), sections = NULL, metad
 
   if (cache == "feather") {
     intermediate = local_loc(htid, suffix = "feather")
-    final = local_loc(htid, suffix = "feather.gz")
+    final = local_loc(htid, suffix = "feather")
     meta_as_json = listified_version[["metadata"]] %>% jsonlite::toJSON(auto_unbox = TRUE, na = "null")
     data = tibble
     schema = arrow::schema(
                            page=arrow::uint16(),
-                           section = arrow::dictionary(arrow::int8()),
+                           section = arrow::utf8(),
                            token = arrow::utf8(),
-                           POS = arrow::dictionary(arrow::int8()),
+                           POS = arrow::utf8(),
                            count = arrow::uint16())
     schema = schema$WithMetadata(list(meta = meta_as_json))
     table = with(data, {
       arrow::Table$create(page = as.integer(page),
-                          section = as.factor(section),
+                          section = section,
                           token = token,
-                          POS = factor(POS),
+                          POS = POS,
                           count = as.integer(count),
                           schema = schema)
     })
     table$metadata$meta = meta_as_json
-    table %>% arrow::write_feather(intermediate, compression = "uncompressed")
-    R.utils::compressFile(intermediate, final, ext = ".gz", FUN = gzfile, overwrite = TRUE)
+    table %>% arrow::write_feather(intermediate, compression = "zstd")
   }
 
   return(tibble %>%.export(cols, metadata, sections, listified_version[['metadata']]))
