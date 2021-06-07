@@ -9,9 +9,8 @@ output: html_notebook
 library(hathidy)
 library(tidyverse)
 
-options("hathidy_dir" = "/drobo/hathi-ef/")
-counts = hathi_counts("uma.ark:/13960/t0dv2df4m")
-hathidy:::local_loc("uma.ark:/13960/t0dv2df4m")
+options("hathidy_dir" = "~/hathi-ef")
+counts = hathi_counts("uma.ark:/13960/t0dv2df4m", cache = 'feather')
 
 counts
 
@@ -20,6 +19,7 @@ page_counts = counts %>% count(page, wt=count)
 ```
 
 ```{r}
+
 
 chunk = function(page_counts, target = 10000) {
   
@@ -91,19 +91,18 @@ chunk = function(page_counts, target = 10000) {
   return(page_counts)
 }
 
+#chunk(page_counts, 5000) %>% count(chunk, wt = n)
 
-chunk(page_counts, 5000) %>% count(chunk, wt = n)
+#chunk(page_counts) %>% summarize(count = sum(n))
+#sum(page_counts$n)
 
-chunk(page_counts) %>% summarize(count = sum(n))
-sum(page_counts$n)
-
-chunk(page_counts, 5000) %>%
-  group_by(chunk) %>%
-  filter(cum == max(cum)) %>%
-  ggplot() + geom_line() +
-  geom_point() + 
-  aes(x=page, y = cum, color=chunk, group = chunk) + 
-  geom_point(aes(y = target), color='red')
+#chunk(page_counts, 5000) %>%
+#  group_by(chunk) %>%
+#  filter(cum == max(cum)) %>%
+#  ggplot() + geom_line() +
+#  geom_point() + 
+#  aes(x=page, y = cum, color=chunk, group = chunk) + 
+#  geom_point(aes(y = target), color='red')
 
 ```
 

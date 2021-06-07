@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-The Hathi Trust has made available 15 million volumes of text with word counts at the page level. ^[Boris Capitanu, Ted Underwood, Peter Organisciak, Timothy Cole, Maria Janina Sarol, J. Stephen Downie (2016). The HathiTrust Research Center Extracted Feature Dataset (1.0) [Dataset]. HathiTrust Research Center,http://dx.doi.org/10.13012/J8X63JT3.]
+The Hathi Trust has made available 17 million volumes of text with word counts at the page level. ^[Boris Capitanu, Ted Underwood, Peter Organisciak, Timothy Cole, Maria Janina Sarol, J. Stephen Downie (2016). The HathiTrust Research Center Extracted Feature Dataset (1.0) [Dataset]. HathiTrust Research Center,http://dx.doi.org/10.13012/J8X63JT3.]
 
 The purpose of this package is to allow you to quickly work with tidy-formatted data for any of these books.
 These features are useful input into a wide variety of tasks in natural language processing, visualization, and other areas.
