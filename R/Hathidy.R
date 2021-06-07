@@ -63,7 +63,6 @@ hathidy_dir <- function() {
 
 load_json <- function(htid, check_suffixes = c("json", "json.bz2")) {
   for (suffix in check_suffixes) {
-
     fname <- local_loc(htid, suffix = suffix)
     if (file.exists(fname)) {
       tryCatch(
@@ -96,20 +95,16 @@ load_json <- function(htid, check_suffixes = c("json", "json.bz2")) {
   output
 }
 
-multi_download =  function(htid, cols, metadata, cache)  {
+multi_download =  function(htid, cols, sections, metadata, cache)  {
   # Do a list of them with a progress bar.
   pb <- progress_estimated(length(htid))
 
   download <- function(htid_) {
     pb$tick()$print()
-    hathi_counts(htid_, cols, metadata, cache)
+    hathi_counts(htid_, cols, sections, metadata, cache)
   }
 
-  #if (length(errors) > 0) {
-  #  warning("Errors on the following htid(s):", errors)
-  #}
-
-  value = htid %>% map(possibly(download, otherwise = tibble(), quiet = FALSE)) %>% bind_rows()
+  value = htid %>% map_dfr(possibly(download, otherwise = tibble(), quiet = FALSE))
 
   diff = setdiff((value$htid), htid)
   if (length(diff) > 0) warning("Unable to return Hathi IDs", diff)
@@ -117,12 +112,9 @@ multi_download =  function(htid, cols, metadata, cache)  {
 }
 
 load_feather = function(path, cols, metadata, sections) {
-  expanded = tempfile()
-  R.utils::decompressFile(path, destname = expanded, remove = FALSE, FUN = gzfile, ext = ".feather", overwrite = TRUE)
-  table = arrow::read_feather(expanded, as_data_frame = FALSE, col_select = all_of(c(cols, "section", "count")))
+  table = arrow::read_feather(path, as_data_frame = FALSE, col_select = all_of(c(cols, "section", "count")))
   metadata_fields = jsonlite::parse_json(table$metadata$meta)
   value = .export(table, cols, metadata, sections = sections, metadata_object = metadata_fields)
-  unlink(expanded)
   return(value)
 }
 
@@ -151,7 +143,7 @@ load_feather = function(path, cols, metadata, sections) {
 #' @return a tibble, with columns created by the call.
 #' @export
 
-hathi_counts <- function(htid, cols = c("page", "token"), sections = NULL, metadata = c("id"), cache = "feather", path = FALSE) {
+hathi_counts <- function(htid, cols = c("page", "token"), sections = NULL, metadata = c("htid"), cache = "feather", path = FALSE) {
 
   if (path) {
     htid = NULL
@@ -167,7 +159,7 @@ hathi_counts <- function(htid, cols = c("page", "token"), sections = NULL, metad
   }
 
   if (length(htid) > 1) {
-    return(multi_download(htid, cols, metadata, cache))
+    return(multi_download(htid, cols, sections, metadata, cache))
   }
 
   # TODO raise on bad meta field.
@@ -179,13 +171,13 @@ hathi_counts <- function(htid, cols = c("page", "token"), sections = NULL, metad
       "sourceInstitution", "sourceInstitutionRecordNumber", "oclc", "isbn",
       "issn", "lccn", "title", "imprint", "lastUpdateDate", "governmentDocument",
       "pubDate", "pubPlace", "language", "bibliographicFormat", "genre", "issuance",
-      "typeOfResource", "classification", "names", "htBibUrl", "handleUrl"
+      "typeOfResource", "classification", "names", "htBibUrl", "handleUrl", "id", "htid"
     )
   )
 
 
   if (path == FALSE) {
-    local_feather <- local_loc(htid, suffix = "feather.gz")
+    local_feather <- local_loc(htid, suffix = "feather")
     if (cache == "feather" && file.exists(local_feather)) {
       return(load_feather(local_feather, cols, metadata, sections))
     }
@@ -205,29 +197,31 @@ hathi_counts <- function(htid, cols = c("page", "token"), sections = NULL, metad
 
   tibble <- listified_version %>% parse_listified_book()
 
+  listified_version[["metadata"]][["htid"]] = htid
+
   if (cache == "feather") {
+    if (!require(arrow)) {stop("You must install the Arrow package for caching.")}
     intermediate = local_loc(htid, suffix = "feather")
-    final = local_loc(htid, suffix = "feather.gz")
+    final = local_loc(htid, suffix = "feather")
     meta_as_json = listified_version[["metadata"]] %>% jsonlite::toJSON(auto_unbox = TRUE, na = "null")
     data = tibble
     schema = arrow::schema(
                            page=arrow::uint16(),
-                           section = arrow::dictionary(arrow::int8()),
+                           section = arrow::utf8(),
                            token = arrow::utf8(),
-                           POS = arrow::dictionary(arrow::int8()),
+                           POS = arrow::utf8(),
                            count = arrow::uint16())
     schema = schema$WithMetadata(list(meta = meta_as_json))
     table = with(data, {
       arrow::Table$create(page = as.integer(page),
-                          section = as.factor(section),
+                          section = section,
                           token = token,
-                          POS = factor(POS),
+                          POS = POS,
                           count = as.integer(count),
                           schema = schema)
     })
     table$metadata$meta = meta_as_json
-    table %>% arrow::write_feather(intermediate, compression = "uncompressed")
-    R.utils::compressFile(intermediate, final, ext = ".gz", FUN = gzfile, overwrite = TRUE)
+    table %>% arrow::write_feather(intermediate, compression = "zstd")
   }
 
   return(tibble %>%.export(cols, metadata, sections, listified_version[['metadata']]))

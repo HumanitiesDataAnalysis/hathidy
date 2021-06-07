@@ -1,10 +1,10 @@
 ---
-title: "Moving from Hathi Trust records to "
+title: "Exploring serials and quanteda links"
 author: "Ben Schmidt"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteIndexEntry{Exploring serials and quanteda links}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-The Hathi Trust has made available 15 million volumes of text with word counts at the page level. ^[Boris Capitanu, Ted Underwood, Peter Organisciak, Timothy Cole, Maria Janina Sarol, J. Stephen Downie (2016). The HathiTrust Research Center Extracted Feature Dataset (1.0) [Dataset]. HathiTrust Research Center,http://dx.doi.org/10.13012/J8X63JT3.]
+The Hathi Trust has made available 17 million volumes of text with word counts at the page level. ^[Boris Capitanu, Ted Underwood, Peter Organisciak, Timothy Cole, Maria Janina Sarol, J. Stephen Downie (2016). The HathiTrust Research Center Extracted Feature Dataset (2.0) [Dataset]. HathiTrust Research Center,http://dx.doi.org/10.13012/J8X63JT3.]
 
 The purpose of this package is to allow you to quickly work with tidy-formatted data for any of these books.
 These features are useful input into a wide variety of tasks in natural language processing, visualization, and other areas.
@@ -32,11 +32,11 @@ library(tidyverse)
 
 As an example, let's take a volume of nursing data.
 
-Using R OpenSci's `hathi` package to handle metadata.
+I originally fetched this data using the hathi package from ROpenSci, but that package has been abandoned.
 
 Start with a seed volume, and move on to metadata.
 
-```{r}
+```r
 
 bibliography_entry = hathi::hathi_bib(htid = "uma.ark:/13960/t0dv2df4m")$items
 
@@ -53,33 +53,32 @@ metadata = bibliography_entry %>%
   mutate(month = ifelse(vol == 10, no+4, no)) %>%
   mutate(date = as.Date(ISOdate(year, month, 1)))
 
-metadata
+metadata %>% write_feather("../ext/data/nursing_volumes.feather")
   
 ```
 ```{r}
+metadata_file = system.file("extdata", "nursing_volumes.feather", package = "hathidy")
+library(arrow)
+metadata = read_feather(metadata_file)
+```
 
-a = hathi_counts(htids[1])
+```{r}
 
-page_counts = a %>% group_by(page) %>% summarize(count = sum(count)) %>% pull(count)
+a = hathi_counts(metadata$htid[1])
 
-
+page_counts = a %>% group_by(page) %>% summarize(count = sum(count), .groups="drop") %>% pull(count)
 
 ```
 
 ```{r}
 
-options(hathidy_dir = "/drobo/feature-counts/")
+options(hathidy_dir = "~/hathi-features/")
 
-data = hathi_counts(htids)
+data = hathi_counts(metadata$htid)
 
 # The first volume in this set is notes.
 
 head(data)
-```
-
-```{r}
-library(HumanitiesDataAnalysis)
-
 ```
 
 Once the HTIDs are known, we can load the data in. Note the global directory at the front here. It's off by default, again so this can live online: but I strongly recommend filling in this field whenever using the package. You can store features in the current working directory, (probably in a folder called "features"), or use a global one. If you think you might work with Hathi more than once, having a local location might make sense: but for reproducible research, you should store just the files used in this particular project. If you don't specify *any* location, feature counts will be downloaded to a temporary directory and deleted at the end of the session, which is less than ideal. (Among other things, your code will take much, much longer to run on a second or third run.)
@@ -166,7 +165,8 @@ nursing %>%
 
 ```{r, fig.height = 6}
 
-library(quanteda)
+library(quanteda.textstats)
+library(quanteda.textplots)
 
 flu_pages = nursing %>% filter(token %>% tolower == "women") %>% distinct(date, page)
 

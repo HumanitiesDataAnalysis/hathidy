@@ -21,8 +21,8 @@ See [the vignette](https://humanitiesdataanalysis.github.io/hathidy/articles/Hat
 
 ## Basic use
 
-Functionality here is almost entirely through one function: `hathi_counts`, 
-which takes as an argument one htid or a vector of htids. It returns a tibble object with 
+Functionality here is almost entirely through one function: `hathi_counts`,
+which takes as an argument one htid or a vector of htids. It returns a tibble object with
 information about full word counts for the requested book, including pages, parts of speech, and so on.
 
 The extracted features also include a great deal of metadata; any of this can be bound to the frame as well by passing it as an argument.
@@ -48,15 +48,16 @@ One of the goals here is to support reproducible research workflows. One importa
 
 The most important are:
 
-1. The location of a directory where feature count files are stored. Downloading to this directory happens automatically.
+1. The location of a directory where feature count files are stored.
+   Downloading to this directory happens automatically.
    By default, this downloading happens to a temporary directory; but this is impolite and unnecessary.
 2. The *structure* of that directory. Hathi Extended Features and this package use,
    by default, a system called 'stubbytree' in which files are nested inside folders
-   to avoid overfilling if you have millions of files. 
+   to avoid overfilling if you have millions of files.
 
 A typical researcher might have many projects using Hathi EF data. A typical workflow might involve writing drafts of the paper
 using a single directory to store everything, like: `options('hathidy_dir' = /Users/bschmidt/hathi-ef)`. If working with more than a few hundred files,
 it would make sense to fill up that directory using rsync or the python ef tools, rather than downloading one at a time over http.
 
-And then before uploading to a repository, copy the related files inside your project into a local folder, and 
+And then before uploading to a repository, copy the related files inside your project into a local folder, and
 rerun the code with something like this: `options('hathidy_dir' = './hathi_data_files')`

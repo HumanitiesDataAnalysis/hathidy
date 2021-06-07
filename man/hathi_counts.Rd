@@ -8,7 +8,7 @@ hathi_counts(
   htid,
   cols = c("page", "token"),
   sections = NULL,
-  metadata = c("id"),
+  metadata = c("htid"),
   cache = "feather",
   path = FALSE
 )
